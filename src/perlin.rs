@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::cmp::PartialEq;
 use bevy::asset::{AssetServer, Assets, Handle, RenderAssetUsages};
 use bevy::image::Image;
-use bevy::prelude::{default, Commands, Res, ResMut, Resource, World};
+use bevy::prelude::{default, Commands, FromWorld, Message, Res, ResMut, Resource, World};
 use bevy::render::extract_resource::ExtractResource;
 use bevy::render::render_asset::RenderAssets;
 use bevy::render::render_graph;
@@ -12,7 +12,7 @@ use bevy::render::render_resource::binding_types::{texture_storage_2d, uniform_b
 use bevy::render::renderer::{RenderContext, RenderDevice, RenderQueue};
 use bevy::render::texture::GpuImage;
 
-const SHADER_ASSET_PATH: &str = "./shaders/my_gen.wgsl";
+const SHADER_ASSET_PATH: &str = "shaders/my_gen.wgsl";
 const SIZE: Extent3d = Extent3d {
     width: 64,
     height: 64,
@@ -35,6 +35,92 @@ pub struct NoisePipeline {
     texture_bind_group_layout: BindGroupLayout,
     pipeline_id: CachedComputePipelineId
 }
+
+// THIS IS ONLY FOR 0.16
+// pub fn ensure_perlin_pipeline_is_initialized(
+//     mut commands: Commands,
+//     // We ask for an Option<Res<...>>. If it's `None`, the resource doesn't exist yet.
+//     pipeline: Option<Res<NoisePipeline>>,
+//     render_device: Res<RenderDevice>,
+//     asset_server: Res<AssetServer>,
+//     pipeline_cache: Res<PipelineCache>,
+// ) {
+//     // If the pipeline resource already exists, we do nothing and exit early.
+//     if pipeline.is_some() {
+//         return;
+//     }
+//
+//     // --- If we get here, the pipeline does NOT exist, so we create it. ---
+//     // This is the exact same logic from the original init_perlin_pipeline function.
+//     let texture_bind_group_layout = render_device.create_bind_group_layout(
+//         "perlin_noise_layout",
+//         &BindGroupLayoutEntries::sequential(
+//             ShaderStages::COMPUTE,
+//             (
+//                 texture_storage_2d(TextureFormat::Rgba8Unorm, StorageTextureAccess::WriteOnly),
+//                 uniform_buffer::<NoiseShaderSettings>(false),
+//             ),
+//         ),
+//     );
+//
+//     let shader = asset_server.load(SHADER_ASSET_PATH);
+//     let pipeline_id = pipeline_cache.queue_compute_pipeline(ComputePipelineDescriptor {
+//         label: Some(Cow::from("perlin_noise_pipeline")),
+//         layout: vec![texture_bind_group_layout.clone()],
+//         shader: shader.clone(),
+//         entry_point: Cow::from("main"),
+//         push_constant_ranges: vec![],
+//         shader_defs: vec![],
+//         zero_initialize_workgroup_memory: false,
+//     });
+//
+//     // We insert the resource, so on the next frame, the `if pipeline.is_some()` check will pass.
+//     commands.insert_resource(NoisePipeline {
+//         texture_bind_group_layout,
+//         pipeline_id,
+//     });
+// }
+
+
+// impl FromWorld for NoisePipeline {
+//     fn from_world(world: &mut World) -> Self {
+//         // This logic is moved directly from your old init_perlin_pipeline function
+//         let render_device = world.resource::<RenderDevice>();
+//         let pipeline_cache = world.resource::<PipelineCache>();
+//
+//         let texture_bind_group_layout = render_device.create_bind_group_layout(
+//             "perlin_noise_layout", // Just for debug
+//             &BindGroupLayoutEntries::sequential(
+//                 ShaderStages::COMPUTE,
+//                 (
+//                     texture_storage_2d(TextureFormat::Rgba8Unorm, StorageTextureAccess::WriteOnly),
+//                     uniform_buffer::<NoiseShaderSettings>(false),
+//                 ),
+//             ),
+//         );
+//
+//         // NOTE: The AssetServer must be retrieved from the main world
+//         // This is a crucial detail when running FromWorld in the RenderApp
+//         let asset_server = world.resource::<AssetServer>();
+//         let shader = asset_server.load(SHADER_ASSET_PATH);
+//
+//         let pipeline_id = pipeline_cache.queue_compute_pipeline(ComputePipelineDescriptor {
+//             label: Some(Cow::from("perlin_noise_pipeline")),
+//             layout: vec![texture_bind_group_layout.clone()],
+//             shader: shader.clone(),
+//             entry_point: Cow::from("main"),
+//             push_constant_ranges: vec![],
+//             shader_defs: vec![],
+//             zero_initialize_workgroup_memory: false,
+//         });
+//
+//         NoisePipeline {
+//             texture_bind_group_layout,
+//             pipeline_id
+//         }
+//     }
+// }
+
 
 #[derive(Resource)]
 struct NoiseImageBindGroup(BindGroup);
@@ -60,7 +146,7 @@ pub fn init_perlin_pipeline(
         label: Some(Cow::from("perlin_noise_pipeline")),
         layout: vec![texture_bind_group_layout.clone()],
         shader: shader.clone(),
-        entry_point: Cow::from("main"), // 0.17 Some(Cow::from("main"))
+        entry_point: Some(Cow::from("main")), // 0.17 Some(Cow::from("main"))
 
         // In the 0.17 u can use ..default() instead of this, but it's good for understanding
         push_constant_ranges: vec![],
@@ -74,20 +160,9 @@ pub fn init_perlin_pipeline(
     });
 }
 
-fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
-    let image_size = SIZE.width * SIZE.height * 4;
-    let image_data = vec![0; image_size as usize];
+pub fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
+    let mut image = Image::new_target_texture(SIZE.width, SIZE.height, TextureFormat::Rgba8Unorm);
 
-    // Image::new_target_texture(); - in the 0.17 u can use this.
-    let mut image = Image::new( // Use this in 0.16.*
-        SIZE,
-        TextureDimension::D2,
-        image_data,
-        TextureFormat::Rgba8Unorm,
-        RenderAssetUsages::MAIN_WORLD
-    );
-
-    // THIS IS THE CRITICAL CHANGE
     image.texture_descriptor.usage =
         TextureUsages::COPY_DST       // Destination for a copy (maybe from another texture)
             | TextureUsages::STORAGE_BINDING  // Writable by the compute shader
@@ -136,7 +211,7 @@ pub fn prepare_bind_group(
     commands.insert_resource(NoiseImageBindGroup(bind_group));
 }
 
-#[derive(Resource, Clone, Default, ExtractResource, PartialEq)]
+#[derive(Resource, Message, Clone, Default, ExtractResource, PartialEq)]
 pub enum NoiseGenerationRequest {
     #[default]
     Idle, // Do nothing
@@ -188,8 +263,7 @@ impl render_graph::Node for PerlinNoiseNode {
                     self.state = NodeState::Generate;
                     // **CRUCIAL**: Reset the request so we don't run again next frame.
                     *request = NoiseGenerationRequest::Idle;
-                } else {
-                    // No request, so make sure we're idle.
+                }  else {
                     self.state = NodeState::Idle;
                 }
             }
@@ -203,6 +277,28 @@ impl render_graph::Node for PerlinNoiseNode {
         render_context: &mut RenderContext,
         world: &World,
     ) -> Result<(), render_graph::NodeRunError> {
+
+        // --- 1. GET THE GPU IMAGE FROM THE HANDLE ---
+
+        // Get the resource that contains our Handle<Image>
+        let noise_image_output = world.resource::<NoiseImageOutput>();
+        let image_handle = &noise_image_output.perlin_texture;
+
+        // Get the RenderAssets resource, which maps handles to their GPU versions
+        let gpu_images = world.resource::<RenderAssets<GpuImage>>();
+
+        // Look up our specific GpuImage using the handle.
+        // This can fail if the asset hasn't been prepared by the GPU yet,
+        // so we handle it gracefully by returning early. This is normal.
+        let Some(gpu_image) = gpu_images.get(image_handle) else {
+            println!("Got.");
+            return Ok(());
+        };
+
+        // Now, `gpu_image` is a `&GpuImage`. We can use its fields like `gpu_image.texture`.
+
+        // --- 2. DISPATCH SHADER (your existing code) ---
+
         // Only do something if our internal state is Generate
         if let NodeState::Generate = self.state {
             println!("Compute Node: Received request, running shader.");
@@ -216,79 +312,15 @@ impl render_graph::Node for PerlinNoiseNode {
                 .begin_compute_pass(&ComputePassDescriptor::default());
 
             pass.set_bind_group(0, bind_group, &[]);
-
             let compute_pipeline = pipeline_cache
                 .get_compute_pipeline(pipeline.pipeline_id)
                 .unwrap();
 
             pass.set_pipeline(compute_pipeline);
             pass.dispatch_workgroups(SIZE.width / 8, SIZE.height / 8, 1);
+            drop(pass); // End the compute pass
         }
 
         Ok(())
     }
 }
-
-// // This is our settings struct. It will be a component in the MainWorld.
-// #[derive(Component, Clone)]
-// pub struct NoiseSettings {
-//     pub frequency: f32,
-//     pub amplitude: f32,
-//     pub octaves: u32,
-// }
-//
-// // This is the version of our settings that will exist in the RenderWorld.
-// // Bevy's extraction process will create this for us.
-// #[derive(Component, Clone, AsBindGroup)]
-// struct GpuNoiseSettings {
-//     #[uniform(1)]
-//     frequency: f32,
-//     #[uniform(1)]
-//     amplitude: f32,
-//     #[uniform(1)]
-//     octaves: u32,
-// }
-//
-// // Tell Bevy how to copy NoiseSettings from the MainWorld to the RenderWorld.
-// impl ExtractComponent for NoiseSettings {
-//     type QueryData = &'static NoiseSettings;
-//     type QueryFilter = ();
-//     type Out = Self;
-//
-//     fn extract_component(item: bevy::ecs::query::QueryItem<'_, Self::QueryData>) -> Option<Self::Out> {
-//         Some(item.clone())
-//     }
-// }
-
-
-// use noise::{NoiseFn, Perlin};
-//
-// pub fn generate_2d_perlin(perlin: Perlin) {
-//     const CHUNK_SIZE: usize = 64; // The size of our chunk in one dimension (64x64)
-//     const AMPLITUDE: f32 = 10.0;  // How high the mountains can be
-//     const FREQUENCY: f64 = 0.05;   // How "zoomed in" the noise is. Higher = more frequent hills.
-//
-//     let mut positions: Vec<[f32; 3]> = Vec::new();
-//     let mut normals: Vec<[f32; 3]> = Vec::new();
-//     let mut indices: Vec<u32> = Vec::new();
-//
-//     // --- 2. GENERATE VERTEX POSITIONS ---
-//
-//     // We need CHUNK_SIZE + 1 vertices to create CHUNK_SIZE squares.
-//     for z in 0..=CHUNK_SIZE {
-//         for x in 0..=CHUNK_SIZE {
-//             // The input for the noise function. We use f64 for higher precision.
-//             let noise_input = [x as f64 * FREQUENCY, z as f64 * FREQUENCY];
-//
-//             // Get the noise value, which is between -1.0 and 1.0.
-//             let noise_value = perlin.get(noise_input);
-//
-//             // Use the noise value to set the Y-height of the vertex.
-//             let y = noise_value as f32 * AMPLITUDE;
-//
-//             positions.push([x as f32, y, z as f32]);
-//             // We'll calculate normals later, so just add a placeholder for now.
-//             normals.push([0.0, 1.0, 0.0]);
-//         }
-//     }
-// }
