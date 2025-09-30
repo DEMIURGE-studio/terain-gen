@@ -2,8 +2,10 @@ use std::borrow::Cow;
 use std::cmp::PartialEq;
 use bevy::asset::{AssetServer, Assets, Handle, RenderAssetUsages};
 use bevy::image::Image;
-use bevy::prelude::{default, Commands, FromWorld, Message, Res, ResMut, Resource, World};
+use bevy::log::info;
+use bevy::prelude::{default, Commands, FromWorld, Message, Res, ResMut, Resource, Trigger, World};
 use bevy::render::extract_resource::ExtractResource;
+use bevy::render::gpu_readback::{Readback, ReadbackComplete};
 use bevy::render::render_asset::RenderAssets;
 use bevy::render::render_graph;
 use bevy::render::render_graph::RenderGraphContext;
@@ -173,7 +175,7 @@ pub fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
 
     // Insert your resource so other systems can find the handle
     commands.insert_resource(NoiseImageOutput {
-        perlin_texture: perlin_handle,
+        perlin_texture: perlin_handle.clone(),
     });
 
     // Don't forget to add the shader settings resource
@@ -181,6 +183,16 @@ pub fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
         frequency: 0.02,
         amplitude: 1.0,
     });
+
+    commands.spawn(Readback::texture(perlin_handle)).observe(
+        |trigger: Trigger<ReadbackComplete>| {
+            // You probably want to interpret the data as a color rather than a `ShaderType`,
+            // but in this case we know the data is a single channel storage texture, so we can
+            // interpret it as a `Vec<u32>`
+            let data: Vec<u32> = trigger.event().to_shader_type();
+            info!("Image {:?}", data);
+        },
+    );
 }
 
 pub fn prepare_bind_group(
