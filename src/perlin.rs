@@ -1,15 +1,15 @@
 use std::borrow::Cow;
 use std::cmp::PartialEq;
-use bevy::asset::{AssetServer, Assets, Handle, RenderAssetUsages};
+use bevy::asset::{AssetServer, Assets, Handle};
 use bevy::image::Image;
 use bevy::log::info;
-use bevy::prelude::{default, Commands, FromWorld, Message, Res, ResMut, Resource, Trigger, World};
+use bevy::prelude::{Commands, Message, Res, ResMut, Resource, On, World};
 use bevy::render::extract_resource::ExtractResource;
 use bevy::render::gpu_readback::{Readback, ReadbackComplete};
 use bevy::render::render_asset::RenderAssets;
 use bevy::render::render_graph;
 use bevy::render::render_graph::RenderGraphContext;
-use bevy::render::render_resource::{BindGroup, BindGroupEntries, BindGroupLayout, BindGroupLayoutEntries, CachedComputePipelineId, CachedPipelineState, ComputePassDescriptor, ComputePipelineDescriptor, Extent3d, PipelineCache, ShaderStages, ShaderType, StorageTextureAccess, TextureDimension, TextureFormat, TextureUsages, UniformBuffer};
+use bevy::render::render_resource::{BindGroup, BindGroupEntries, BindGroupLayout, BindGroupLayoutEntries, CachedComputePipelineId, CachedPipelineState, ComputePassDescriptor, ComputePipelineDescriptor, Extent3d, PipelineCache, ShaderStages, ShaderType, StorageTextureAccess, TextureFormat, TextureUsages, UniformBuffer};
 use bevy::render::render_resource::binding_types::{texture_storage_2d, uniform_buffer};
 use bevy::render::renderer::{RenderContext, RenderDevice, RenderQueue};
 use bevy::render::texture::GpuImage;
@@ -37,92 +37,6 @@ pub struct NoisePipeline {
     texture_bind_group_layout: BindGroupLayout,
     pipeline_id: CachedComputePipelineId
 }
-
-// THIS IS ONLY FOR 0.16
-// pub fn ensure_perlin_pipeline_is_initialized(
-//     mut commands: Commands,
-//     // We ask for an Option<Res<...>>. If it's `None`, the resource doesn't exist yet.
-//     pipeline: Option<Res<NoisePipeline>>,
-//     render_device: Res<RenderDevice>,
-//     asset_server: Res<AssetServer>,
-//     pipeline_cache: Res<PipelineCache>,
-// ) {
-//     // If the pipeline resource already exists, we do nothing and exit early.
-//     if pipeline.is_some() {
-//         return;
-//     }
-//
-//     // --- If we get here, the pipeline does NOT exist, so we create it. ---
-//     // This is the exact same logic from the original init_perlin_pipeline function.
-//     let texture_bind_group_layout = render_device.create_bind_group_layout(
-//         "perlin_noise_layout",
-//         &BindGroupLayoutEntries::sequential(
-//             ShaderStages::COMPUTE,
-//             (
-//                 texture_storage_2d(TextureFormat::Rgba8Unorm, StorageTextureAccess::WriteOnly),
-//                 uniform_buffer::<NoiseShaderSettings>(false),
-//             ),
-//         ),
-//     );
-//
-//     let shader = asset_server.load(SHADER_ASSET_PATH);
-//     let pipeline_id = pipeline_cache.queue_compute_pipeline(ComputePipelineDescriptor {
-//         label: Some(Cow::from("perlin_noise_pipeline")),
-//         layout: vec![texture_bind_group_layout.clone()],
-//         shader: shader.clone(),
-//         entry_point: Cow::from("main"),
-//         push_constant_ranges: vec![],
-//         shader_defs: vec![],
-//         zero_initialize_workgroup_memory: false,
-//     });
-//
-//     // We insert the resource, so on the next frame, the `if pipeline.is_some()` check will pass.
-//     commands.insert_resource(NoisePipeline {
-//         texture_bind_group_layout,
-//         pipeline_id,
-//     });
-// }
-
-
-// impl FromWorld for NoisePipeline {
-//     fn from_world(world: &mut World) -> Self {
-//         // This logic is moved directly from your old init_perlin_pipeline function
-//         let render_device = world.resource::<RenderDevice>();
-//         let pipeline_cache = world.resource::<PipelineCache>();
-//
-//         let texture_bind_group_layout = render_device.create_bind_group_layout(
-//             "perlin_noise_layout", // Just for debug
-//             &BindGroupLayoutEntries::sequential(
-//                 ShaderStages::COMPUTE,
-//                 (
-//                     texture_storage_2d(TextureFormat::Rgba8Unorm, StorageTextureAccess::WriteOnly),
-//                     uniform_buffer::<NoiseShaderSettings>(false),
-//                 ),
-//             ),
-//         );
-//
-//         // NOTE: The AssetServer must be retrieved from the main world
-//         // This is a crucial detail when running FromWorld in the RenderApp
-//         let asset_server = world.resource::<AssetServer>();
-//         let shader = asset_server.load(SHADER_ASSET_PATH);
-//
-//         let pipeline_id = pipeline_cache.queue_compute_pipeline(ComputePipelineDescriptor {
-//             label: Some(Cow::from("perlin_noise_pipeline")),
-//             layout: vec![texture_bind_group_layout.clone()],
-//             shader: shader.clone(),
-//             entry_point: Cow::from("main"),
-//             push_constant_ranges: vec![],
-//             shader_defs: vec![],
-//             zero_initialize_workgroup_memory: false,
-//         });
-//
-//         NoisePipeline {
-//             texture_bind_group_layout,
-//             pipeline_id
-//         }
-//     }
-// }
-
 
 #[derive(Resource)]
 struct NoiseImageBindGroup(BindGroup);
@@ -178,18 +92,18 @@ pub fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
         perlin_texture: perlin_handle.clone(),
     });
 
-    // Don't forget to add the shader settings resource
+    // Add shader settings resource
     commands.insert_resource(NoiseShaderSettings {
         frequency: 0.02,
         amplitude: 1.0,
     });
 
     commands.spawn(Readback::texture(perlin_handle)).observe(
-        |trigger: Trigger<ReadbackComplete>| {
+        |trigger: On<ReadbackComplete>| {
             // You probably want to interpret the data as a color rather than a `ShaderType`,
             // but in this case we know the data is a single channel storage texture, so we can
             // interpret it as a `Vec<u32>`
-            let data: Vec<u32> = trigger.event().to_shader_type();
+            let data: Vec<u32> = trigger.event().to_shader_type(); // !Maybe i should use here uniform buffer since it's output bind in perlin shader!
             info!("Image {:?}", data);
         },
     );
@@ -235,7 +149,7 @@ pub struct PerlinNoiseNode {
     state: NodeState,
 }
 
-// The possible states for our node
+// The possible states for our node (NOT MESSAGE, IT'S PART OF NODE)
 enum NodeState {
     Loading, // Waiting for the pipeline to be compiled
     Idle,    // Doing nothing
@@ -289,28 +203,6 @@ impl render_graph::Node for PerlinNoiseNode {
         render_context: &mut RenderContext,
         world: &World,
     ) -> Result<(), render_graph::NodeRunError> {
-
-        // --- 1. GET THE GPU IMAGE FROM THE HANDLE ---
-
-        // Get the resource that contains our Handle<Image>
-        let noise_image_output = world.resource::<NoiseImageOutput>();
-        let image_handle = &noise_image_output.perlin_texture;
-
-        // Get the RenderAssets resource, which maps handles to their GPU versions
-        let gpu_images = world.resource::<RenderAssets<GpuImage>>();
-
-        // Look up our specific GpuImage using the handle.
-        // This can fail if the asset hasn't been prepared by the GPU yet,
-        // so we handle it gracefully by returning early. This is normal.
-        let Some(gpu_image) = gpu_images.get(image_handle) else {
-            println!("Got.");
-            return Ok(());
-        };
-
-        // Now, `gpu_image` is a `&GpuImage`. We can use its fields like `gpu_image.texture`.
-
-        // --- 2. DISPATCH SHADER (your existing code) ---
-
         // Only do something if our internal state is Generate
         if let NodeState::Generate = self.state {
             println!("Compute Node: Received request, running shader.");
@@ -330,7 +222,7 @@ impl render_graph::Node for PerlinNoiseNode {
 
             pass.set_pipeline(compute_pipeline);
             pass.dispatch_workgroups(SIZE.width / 8, SIZE.height / 8, 1);
-            drop(pass); // End the compute pass
+            drop(pass); // End the compute pass I NEED TO UNDERSTAND WHY IT USE DROP HERE
         }
 
         Ok(())

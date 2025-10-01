@@ -1,18 +1,11 @@
-use bevy::asset::Assets;
-use bevy::pbr::StandardMaterial;
-use bevy::prelude::{Commands, EventReader, EventWriter, Mesh, MessageReader, ResMut};
+use bevy::prelude::{Commands, MessageReader, ResMut};
 use crate::{ChunkMap, LoadChunkEvent, UnloadChunkEvent};
-use crate::perlin::{NoiseGenerationRequest, NoiseShaderSettings};
+use crate::perlin::{NoiseGenerationRequest};
 
 pub fn spawn_chunk_on_event(
-    mut commands: Commands,
     mut reader: MessageReader<LoadChunkEvent>,
-    mut chunk_map: ResMut<ChunkMap>,
-    mut noise_generation_request: ResMut<NoiseGenerationRequest>,
-    // We get the writer to send a request to the render world
-    // mut noise_request_writer: EventWriter<NoiseGenerationRequest>,
-    // We get the settings to update them with the chunk's offset
-    mut noise_settings: ResMut<NoiseShaderSettings>,
+    chunk_map: ResMut<ChunkMap>,
+    mut noise_generation_request: ResMut<NoiseGenerationRequest>
 ) {
     for event in reader.read() {
         let chunk_pos = event.position;
@@ -31,7 +24,7 @@ pub fn spawn_chunk_on_event(
 
 pub fn despawn_chunk_on_event(
     mut commands: Commands,
-    mut reader: EventReader<UnloadChunkEvent>,
+    mut reader: MessageReader<UnloadChunkEvent>,
     mut chunk_map: ResMut<ChunkMap>,
 ) {
     for event in reader.read() {
