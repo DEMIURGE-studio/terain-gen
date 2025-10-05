@@ -23,7 +23,7 @@ const SIZE: Extent3d = Extent3d {
 
 #[derive(Resource, Clone, ExtractResource)]
 pub struct NoiseImageOutput {
-    perlin_texture: Handle<Image>
+    pub perlin_texture: Handle<Image>
 }
 
 #[derive(Resource, Clone, ExtractResource, ShaderType)]
@@ -89,7 +89,7 @@ pub fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
 
     // Insert your resource so other systems can find the handle
     commands.insert_resource(NoiseImageOutput {
-        perlin_texture: perlin_handle.clone(),
+        perlin_texture: perlin_handle,
     });
 
     // Add shader settings resource
@@ -97,16 +97,6 @@ pub fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
         frequency: 0.02,
         amplitude: 1.0,
     });
-
-    commands.spawn(Readback::texture(perlin_handle)).observe(
-        |trigger: On<ReadbackComplete>| {
-            // You probably want to interpret the data as a color rather than a `ShaderType`,
-            // but in this case we know the data is a single channel storage texture, so we can
-            // interpret it as a `Vec<u32>`
-            let data: Vec<u32> = trigger.event().to_shader_type(); // !Maybe i should use here uniform buffer since it's output bind in perlin shader!
-            info!("Image {:?}", data);
-        },
-    );
 }
 
 pub fn prepare_bind_group(
@@ -183,7 +173,6 @@ impl render_graph::Node for PerlinNoiseNode {
             NodeState::Idle | NodeState::Generate => {
                 // Get the signal resource that was extracted from the main world
                 let mut request = world.resource_mut::<NoiseGenerationRequest>();
-
                 if *request == NoiseGenerationRequest::Generate {
                     // We received a request! Change our internal state to Generate.
                     self.state = NodeState::Generate;

@@ -1,5 +1,7 @@
 mod chunk_manager;
 mod perlin;
+mod height_map;
+mod heightmap_to_map;
 
 use std::collections::HashMap;
 use bevy::prelude::*;
@@ -7,7 +9,8 @@ use bevy::render::extract_resource::ExtractResourcePlugin;
 use bevy::render::{Render, RenderApp, RenderStartup};
 use bevy::render::render_graph::{RenderGraph, RenderLabel};
 use crate::chunk_manager::{despawn_chunk_on_event, spawn_chunk_on_event};
-use crate::perlin::{ init_perlin_pipeline, prepare_bind_group, setup, NoiseGenerationRequest, NoiseImageOutput, NoiseShaderSettings, PerlinNoiseNode};
+use crate::height_map::WorldLevel;
+use crate::perlin::{init_perlin_pipeline, prepare_bind_group, setup, NoiseGenerationRequest, NoiseImageOutput, NoiseShaderSettings, PerlinNoiseNode};
 
 // A prelude module is a common pattern in Rust.
 // It re-exports all the public types a user of this crate will need.
@@ -19,6 +22,9 @@ pub mod prelude {
     };
 }
 
+#[derive(Message)]
+pub struct HeightMap([[WorldLevel; 64]; 64]);
+
 #[derive(Debug, Clone)]
 pub struct ChunkData {
     pub entity: Entity, // The entity that represents this chunk in the world
@@ -26,8 +32,7 @@ pub struct ChunkData {
 
 #[derive(Resource, Default, Debug)]
 pub struct ChunkMap {
-    pub chunks: HashMap<IVec2, ChunkData>,
-    pub chunk_size: i32
+    pub chunks: HashMap<IVec2, ChunkData>
 }
 
 // An event to request that a specific chunk be loaded.
@@ -53,9 +58,10 @@ impl Plugin for TerrainPlugin {
             .insert_resource(NoiseGenerationRequest::Idle)
             .add_message::<LoadChunkEvent>()
             .add_message::<UnloadChunkEvent>()
+            .add_message::<HeightMap>()
+            // .add_observer()
             .insert_resource(ChunkMap {
-                chunks: HashMap::new(),
-                chunk_size: 64
+                chunks: HashMap::new()
             });
 
         app.add_systems(Startup, setup);

@@ -4,5 +4,5 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bevy = "0.17.0-rc.2"
-noise = "0.9"
+bevy = "0.17.1"
+#noise = "0.9"
