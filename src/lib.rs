@@ -22,8 +22,10 @@ pub mod prelude {
     };
 }
 
+pub const CHUNK_SIZE: usize = 64;
+
 #[derive(Message)]
-pub struct HeightMap([[WorldLevel; 64]; 64]);
+pub struct HeightMap([[WorldLevel; CHUNK_SIZE]; CHUNK_SIZE]);
 
 #[derive(Debug, Clone)]
 pub struct ChunkData {

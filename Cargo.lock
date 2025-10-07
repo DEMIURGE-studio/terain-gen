@@ -4175,6 +4175,7 @@ name = "terain-gen"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "rand",
 ]
 
 [[package]]
